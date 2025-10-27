@@ -1,7 +1,7 @@
 CXX_FLAGS=-std=c++11 -O2 -Wall -Wextra
 
 # Direct include paths since pkg-config has issues with OMPL's Eigen3 dependency
-INCLUDE_FLAGS=-I/usr/local/include/ompl-1.7 -I/usr/include/eigen3
+INCLUDE_FLAGS=-I/usr/local/include/ompl-1.7 -I/usr/include/eigen3 -Isrc -Iprovided -I/usr/include/python3.10
 # Linker options
 LD_FLAGS=-L/usr/local/lib -lompl -lboost_system -lboost_filesystem -lboost_serialization
 

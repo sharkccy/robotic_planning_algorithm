@@ -195,6 +195,7 @@ bool isValidSquare(double x, double y, double theta, double sideLength, const st
         }
     }
 
+    
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///// SUPER SPECIAL CASES ////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -246,4 +247,13 @@ bool isValidSquare(double x, double y, double theta, double sideLength, const st
         }
     }
     return true;
+}
+
+bool isValidStateSquare(const ompl::base::State* state, double sideLen, const std::vector<Rectangle>& obstacles)
+{
+    const auto* se2 = state->as<ompl::base::SE2StateSpace::StateType>();
+    const double x = se2->getX();
+    const double y = se2->getY();
+    const double theta = se2->getYaw();
+    return isValidSquare(x, y, theta, sideLen, obstacles);
 }
