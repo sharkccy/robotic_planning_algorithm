@@ -1,7 +1,7 @@
 ///////////////////////////////////////
 // COMP/ELEC/MECH 450/550
 // Project 4
-// Authors: FILL ME OUT!!
+// Authors: Chen-En Lin
 //////////////////////////////////////
 
 #include <iostream>
@@ -14,6 +14,13 @@
 // Your implementation of RG-RRT
 #include "RG-RRT.h"
 
+#include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <ompl/control/spaces/RealVectorControlSpace.h>
+#include <cmath>
+
+#include <ompl/control/planners/rrt/RRT.h>
+#include <ompl/control/planners/kpiece/KPIECE1.h>
+
 // Your projection for the pendulum
 class PendulumProjection : public ompl::base::ProjectionEvaluator
 {
@@ -25,32 +32,124 @@ public:
     unsigned int getDimension() const override
     {
         // TODO: The dimension of your projection for the pendulum
-        return 0;
+        return 2;
     }
 
-    void project(const ompl::base::State */* state */, Eigen::Ref<Eigen::VectorXd> /* projection */) const override
+    void project(const ompl::base::State *state, Eigen::Ref<Eigen::VectorXd> projection) const override
     {
         // TODO: Your projection for the pendulum
+        const auto *s = state->as<ompl::base::RealVectorStateSpace::StateType>()->values;
+        projection[0] = s[0];
+        projection[1] = s[1];
     }
 };
 
-void pendulumODE(const ompl::control::ODESolver::StateType &/* q */, const ompl::control::Control */* control */,
-                 ompl::control::ODESolver::StateType &/* qdot */)
+void pendulumODE(const ompl::control::ODESolver::StateType &q, const ompl::control::Control *control,
+                 ompl::control::ODESolver::StateType &qdot)
 {
     // TODO: Fill in the ODE for the pendulum's dynamics
+    const double *u = control->as<ompl::control::RealVectorControlSpace::ControlType>()->values;
+    const double torque = u[0];
+
+    const double theta = q[0];
+    const double rot_velocity= q[1];
+
+    qdot.resize(q.size(), 0);
+    
+    qdot[0] = rot_velocity;
+    qdot[1] = (-9.81) * cos(theta) + torque;
 }
 
-ompl::control::SimpleSetupPtr createPendulum(double /* torque */)
+ompl::control::SimpleSetupPtr createPendulum(double torque)
 {
     // TODO: Create and setup the pendulum's state space, control space, validity checker, everything you need for
     // planning.
-    return nullptr;
+    auto sSpace = std::make_shared<ompl::base::RealVectorStateSpace>(2);
+    
+    ompl::base::RealVectorBounds sbounds(2);
+    sbounds.setLow(0,-M_PI);
+    sbounds.setHigh(0,M_PI);
+    sbounds.setLow(1,-10);
+    sbounds.setHigh(1,10);
+    sSpace->setBounds(sbounds);
+
+    sSpace->registerDefaultProjection(std::make_shared<PendulumProjection>(sSpace.get()));
+
+    auto cSpace = std::make_shared<ompl::control::RealVectorControlSpace>(sSpace, 1);
+
+    ompl::base::RealVectorBounds cbounds(1);
+    cbounds.setLow(-torque);
+    cbounds.setHigh(torque);
+    cSpace->setBounds(cbounds);
+
+    auto ss = std::make_shared<ompl::control::SimpleSetup>(cSpace);
+
+    ss->setStateValidityChecker([](const ompl::base::State* /*state*/) {
+        return true;
+    });
+
+    auto odeSolver = std::make_shared<ompl::control::ODEBasicSolver<>>(ss->getSpaceInformation(), &pendulumODE);
+
+    auto postPropagate = [](const ompl::base::State* /*state*/, const ompl::control::Control* /*control*/,
+                            double /*duration*/, ompl::base::State* result)
+    {
+        auto* rv = result->as<ompl::base::RealVectorStateSpace::StateType>()->values;
+        while (rv[0] >  M_PI) rv[0] -= 2.0 * M_PI;
+        while (rv[0] < -M_PI) rv[0] += 2.0 * M_PI;
+    };
+    ss->setStatePropagator(ompl::control::ODESolver::getStatePropagator(odeSolver, postPropagate));
+
+    auto si = ss->getSpaceInformation();
+    si->setPropagationStepSize(0.1);
+    si->setMinMaxControlDuration(1, 20);
+
+
+    ompl::base::ScopedState<ompl::base::RealVectorStateSpace> start(sSpace);
+    start[0] = -M_PI / 2.0;
+    start[1] = 0.0;
+
+    ompl::base::ScopedState<ompl::base::RealVectorStateSpace> goal(sSpace);
+    goal[0] = M_PI / 2.0;
+    goal[1] = 0.0;
+
+    ss->setStartAndGoalStates(start, goal, 0.05); // adjust parameter
+
+    return ss;
 }
 
-void planPendulum(ompl::control::SimpleSetupPtr &/* ss */, int /* choice */)
+void planPendulum(ompl::control::SimpleSetupPtr &ss, int choice)
 {
     // TODO: Do some motion planning for the pendulum
     // choice is what planner to use.
+    ompl::base::PlannerPtr planner;
+    auto si = ss->getSpaceInformation();
+    
+    if (choice == 1) // RRT
+    {
+        planner = std::make_shared<ompl::control::RRT>(si);
+    }
+    else if (choice == 2) // KPIECE1
+    {
+        planner = std::make_shared<ompl::control::KPIECE1>(si);
+    }
+    else if (choice == 3) // RG-RRT
+    {
+        //planner = std::make_shared<ompl::control::RRT>(si); // temporary
+    }
+
+    ss->setPlanner(planner);
+
+    ompl::base::PlannerStatus solved = ss->solve(30.0);
+    if (solved)
+    {
+        std::cout << "Found Solution:" << std::endl;
+        auto path = ss->getSolutionPath();
+        path.printAsMatrix(std::cout);
+    }
+    else
+    {
+        std::cout << "No solution found" << std::endl;
+    }
 }
 
 void benchmarkPendulum(ompl::control::SimpleSetupPtr &/* ss */)
