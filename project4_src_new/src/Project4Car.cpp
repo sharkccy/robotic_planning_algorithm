@@ -5,6 +5,8 @@
 //////////////////////////////////////
 
 #include <iostream>
+#include <fstream>
+#include <cmath>
 
 #include <ompl/base/ProjectionEvaluator.h>
 
@@ -75,6 +77,13 @@ void makeStreet(std::vector<Rectangle> &  obstacles )
     obstacles.clear();
     obstacles.push_back({0.0, 20.0, 40.0, 80.0});
     obstacles.push_back({60.0, 20.0, 40.0, 60.0});
+
+    std::ofstream obsout("obstacles.csv");
+    for (const auto &o : obstacles){
+        obsout << o.x << ',' << o.y << ',' << o.width << ',' << o.height << '\n';
+    }
+    obsout.close();
+    std::cout << "Saved: obstacles.csv" << std::endl;
 }
 
 ompl::control::SimpleSetupPtr createCar(std::vector<Rectangle> & obstacles )
@@ -112,12 +121,17 @@ ompl::control::SimpleSetupPtr createCar(std::vector<Rectangle> & obstacles )
     ss->setStatePropagator(ompl::control::ODESolver::getStatePropagator(odeSolver));
 
     auto si = ss->getSpaceInformation();
-    si->setPropagationStepSize(0.05);
-    si->setMinMaxControlDuration(1, 10);
+    si->setPropagationStepSize(0.02);
+    si->setMinMaxControlDuration(1, 20);
+    si->setStateValidityCheckingResolution(0.005);
 
     // Set state validity checker
     const double carLength = 3;
-    ss->setStateValidityChecker([carLength, vBounds, &obstacles](const ompl::base::State *s) -> bool {
+    ss->setStateValidityChecker([si, carLength, vBounds, &obstacles](const ompl::base::State *s) -> bool {
+
+        if(!si->satisfiesBounds(s))
+            return false;
+
         const auto *cstate = s->as<ompl::base::CompoundState>();
         const auto *se2state = cstate->as<ompl::base::SE2StateSpace::StateType>(0);
         const auto *vstate = cstate->as<ompl::base::RealVectorStateSpace::StateType>(1);
@@ -170,6 +184,29 @@ void planCar(ompl::control::SimpleSetupPtr &ss, int choice)
     {
         std::cout << "Found solution:" << std::endl;
         std::cout << "Number of states in solution: " << ss->getSolutionPath().asGeometric().getStateCount() << std::endl;
+
+        std::ofstream bout("path_box.csv");
+        auto gpath = ss->getSolutionPath().asGeometric();
+        // gpath.interpolate(400);
+
+        for (std::size_t i = 0; i < gpath.getStateCount(); ++i)
+        {
+            const ompl::base::State *s = gpath.getState(i);
+
+            // state is compound: [SE2, R^1]
+            const auto *cs  = s->as<ompl::base::CompoundState>();
+            const auto *se2 = cs->as<ompl::base::SE2StateSpace::StateType>(0);
+            const auto *sv  = cs->as<ompl::base::RealVectorStateSpace::StateType>(1);
+
+            const double x   = se2->getX();
+            const double y   = se2->getY();
+            const double yaw = se2->getYaw();
+            const double v   = (*sv)[0];
+
+            bout << x << ',' << y << ',' << yaw << ',' << v << '\n';
+        }
+        bout.close();
+        std::cout << "Saved: path_box.csv" << std::endl;
     }
     else
     {
