@@ -21,6 +21,9 @@
 #include <ompl/control/planners/rrt/RRT.h>
 #include <ompl/control/planners/kpiece/KPIECE1.h>
 
+#include <fstream>
+#include <iomanip>
+
 // Your projection for the pendulum
 class PendulumProjection : public ompl::base::ProjectionEvaluator
 {
@@ -100,9 +103,8 @@ ompl::control::SimpleSetupPtr createPendulum(double torque)
     ss->setStatePropagator(ompl::control::ODESolver::getStatePropagator(odeSolver, postPropagate));
 
     auto si = ss->getSpaceInformation();
-    si->setPropagationStepSize(0.1);
+    si->setPropagationStepSize(0.02);
     si->setMinMaxControlDuration(1, 20);
-
 
     ompl::base::ScopedState<ompl::base::RealVectorStateSpace> start(sSpace);
     start[0] = -M_PI / 2.0;
@@ -134,7 +136,7 @@ void planPendulum(ompl::control::SimpleSetupPtr &ss, int choice)
     }
     else if (choice == 3) // RG-RRT
     {
-        //planner = std::make_shared<ompl::control::RRT>(si); // temporary
+        // planner = std::make_shared<ompl::control::RG-RRT>(si); // temporary
     }
 
     ss->setPlanner(planner);
@@ -145,6 +147,27 @@ void planPendulum(ompl::control::SimpleSetupPtr &ss, int choice)
         std::cout << "Found Solution:" << std::endl;
         auto path = ss->getSolutionPath();
         path.printAsMatrix(std::cout);
+
+        std::ofstream out("pendulum_path.csv");
+        out << std::fixed << std::setprecision(6);
+        out << "t,theta,omega\n";
+
+        const auto &states    = path.getStates();
+        const auto &durations = path.getControlDurations();
+
+        double t = 0.0;
+
+        auto *s0 = states.front()->as<ompl::base::RealVectorStateSpace::StateType>()->values;
+        out << t << "," << s0[0] << "," << s0[1] << "\n";
+
+        for (std::size_t i = 0; i < durations.size(); ++i)
+        {
+            t += durations[i];
+            auto *s = states[i + 1]->as<ompl::base::RealVectorStateSpace::StateType>()->values;
+            out << t << "," << s[0] << "," << s[1] << "\n";
+        }
+
+        out.close();
     }
     else
     {
