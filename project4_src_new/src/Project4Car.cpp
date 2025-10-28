@@ -123,7 +123,7 @@ ompl::control::SimpleSetupPtr createCar(std::vector<Rectangle> & obstacles )
     auto si = ss->getSpaceInformation();
     si->setPropagationStepSize(0.02);
     si->setMinMaxControlDuration(1, 20);
-    si->setStateValidityCheckingResolution(0.005);
+    si->setStateValidityCheckingResolution(0.003);
 
     // Set state validity checker
     const double carLength = 3;
